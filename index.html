@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>House Construction Expense Tracker</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1f2937;background:#f4f6f8}
+*{box-sizing:border-box}body{margin:0;padding:16px}.wrap{max-width:900px;margin:auto}
+header{padding:20px 4px 12px}h1{font-size:1.55rem;margin:0 0 6px}p{margin:5px 0;color:#64748b;line-height:1.45}
+.panel,.stat{background:white;border:1px solid #e5e7eb;border-radius:14px;padding:16px;margin:12px 0}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.stat span{display:block;color:#64748b;font-size:.84rem}.stat strong{display:block;font-size:1.35rem;margin-top:5px;overflow-wrap:anywhere}
+h2{font-size:1.05rem;margin:0 0 14px}form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+label{display:block;font-size:.88rem;font-weight:600}input,select,textarea,button{font:inherit;width:100%;border-radius:9px;border:1px solid #cbd5e1;padding:11px;background:white;color:#1f2937;margin-top:5px}
+textarea{min-height:70px;resize:vertical}.wide{grid-column:1/-1}button{border:0;background:#176b4d;color:white;font-weight:650;cursor:pointer}.secondary{background:#e8eef2;color:#243447}.danger{background:#fff0f0;color:#a12626;padding:7px;font-size:.82rem;width:auto}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap}.toolbar button{width:auto;flex:1;min-width:120px}
+table{border-collapse:collapse;width:100%;font-size:.9rem}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top}th{color:#64748b;font-size:.78rem}td.amount{white-space:nowrap;font-weight:650}
+.table-wrap{overflow-x:auto}.empty{padding:18px;text-align:center;color:#64748b}
+.notice{font-size:.84rem;background:#fff8e6;border:1px solid #f1dfab;padding:12px;border-radius:10px;color:#6b4d0b;line-height:1.5}
+@media(max-width:560px){body{padding:10px}.panel{padding:13px}form{grid-template-columns:1fr}.wide{grid-column:auto}h1{font-size:1.35rem}.stats{grid-template-columns:1fr 1fr}table{min-width:620px}}
+</style>
+</head>
+<body><main class="wrap">
+<header><h1>House Construction Expense Tracker</h1><p>Record construction payments and keep an eye on your budget.</p></header>
+<div class="notice"><strong>Privacy:</strong> Entries are saved only in this browser on this device. They are not uploaded to GitHub. Export a CSV backup regularly. Clearing browser data may erase entries. The website itself is public, so do not add sensitive personal information.</div>
+<section class="stats" aria-label="Summary">
+<div class="stat"><span>Total recorded expenses</span><strong id="total">₹0</strong></div>
+<div class="stat"><span>Number of entries</span><strong id="count">0</strong></div>
+</section>
+<section class="panel">
+<h2>Add an expense</h2>
+<form id="expenseForm">
+<label>Date<input id="date" type="date" required></label>
+<label>Amount (₹)<input id="amount" type="number" min="0.01" step="0.01" placeholder="e.g. 12500" required></label>
+<label>Category<select id="category" required>
+<option value="Cement & steel">Cement & steel</option><option value="Labour">Labour</option><option value="Laterite & masonry">Laterite & masonry</option><option value="Sand & aggregate">Sand & aggregate</option><option value="Electrical">Electrical</option><option value="Plumbing">Plumbing</option><option value="Carpentry & doors">Carpentry & doors</option><option value="Tiles & flooring">Tiles & flooring</option><option value="Painting">Painting</option><option value="Kitchen & interiors">Kitchen & interiors</option><option value="Permits & professional fees">Permits & professional fees</option><option value="Transport">Transport</option><option value="Other">Other</option>
+</select></label>
+<label>Paid to / Vendor<input id="vendor" maxlength="100" placeholder="Supplier or contractor"></label>
+<label>Bill / receipt number<input id="bill" maxlength="60" placeholder="Optional"></label>
+<label>Description<input id="description" maxlength="180" placeholder="What was this payment for?"></label>
+<div class="wide"><button type="submit">Save expense</button></div>
+</form></section>
+<section class="panel">
+<h2>Expense records</h2>
+<label>Filter by category<select id="filter"><option value="">All categories</option><option>Cement & steel</option><option>Labour</option><option>Laterite & masonry</option><option>Sand & aggregate</option><option>Electrical</option><option>Plumbing</option><option>Carpentry & doors</option><option>Tiles & flooring</option><option>Painting</option><option>Kitchen & interiors</option><option>Permits & professional fees</option><option>Transport</option><option>Other</option></select></label>
+<div class="toolbar" style="margin:12px 0"><button id="export" type="button">Export CSV backup</button><button id="importBtn" class="secondary" type="button">Import CSV backup</button><input id="importFile" type="file" accept=".csv,text/csv" hidden></div>
+<p id="filteredSummary"></p>
+<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category / details</th><th>Vendor / bill</th><th>Amount</th><th>Action</th></tr></thead><tbody id="rows"></tbody></table></div>
+<div id="empty" class="empty">No expenses yet. Add your first entry above.</div>
+</section>
+<p style="text-align:center;font-size:.8rem">Tip: Export a CSV backup after making important updates.</p>
+</main>
+<script>
+const KEY="houseConstructionExpenses_v1";
+const $=id=>document.getElementById(id);
+let expenses=[];
+try{expenses=JSON.parse(localStorage.getItem(KEY)||"[]");if(!Array.isArray(expenses))expenses=[]}catch(e){expenses=[]}
+$("date").value=new Date().toLocaleDateString("en-CA");
+const money=n=>new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:2}).format(n);
+const safe=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function save(){localStorage.setItem(KEY,JSON.stringify(expenses));render()}
+function render(){
+ const filter=$("filter").value;
+ const visible=expenses.filter(x=>!filter||x.category===filter).sort((a,b)=>b.date.localeCompare(a.date));
+ $("total").textContent=money(expenses.reduce((s,x)=>s+Number(x.amount||0),0));
+ $("count").textContent=expenses.length;
+ $("filteredSummary").textContent=filter?`Showing ${visible.length} record(s) for ${filter}. Subtotal: ${money(visible.reduce((s,x)=>s+Number(x.amount||0),0))}`:`Showing all ${visible.length} record(s).`;
+ $("rows").innerHTML=visible.map(x=>`<tr><td>${safe(x.date)}</td><td><strong>${safe(x.category)}</strong><br>${safe(x.description)}</td><td>${safe(x.vendor)}<br>${x.bill?"Bill: "+safe(x.bill):""}</td><td class="amount">${money(Number(x.amount))}</td><td><button class="danger" data-delete="${safe(x.id)}" type="button">Delete</button></td></tr>`).join("");
+ $("empty").style.display=visible.length?"none":"block";
+}
+$("expenseForm").addEventListener("submit",e=>{
+ e.preventDefault();
+ const item={id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),date:$("date").value,amount:Number($("amount").value),category:$("category").value,vendor:$("vendor").value.trim(),bill:$("bill").value.trim(),description:$("description").value.trim()};
+ if(!item.date||!(item.amount>0)){alert("Please enter a valid date and amount.");return}
+ expenses.push(item);save();
+ const keepDate=$("date").value;$("expenseForm").reset();$("date").value=keepDate;
+});
+$("rows").addEventListener("click",e=>{const b=e.target.closest("[data-delete]");if(!b)return;if(confirm("Delete this expense record?")){expenses=expenses.filter(x=>x.id!==b.dataset.delete);save()}});
+$("filter").addEventListener("change",render);
+function csvCell(v){return '"'+String(v??"").replace(/"/g,'""')+'"'}
+$("export").addEventListener("click",()=>{
+ const cols=["date","amount","category","vendor","bill","description"];
+ const content=[cols.join(","),...expenses.map(x=>cols.map(k=>csvCell(x[k])).join(","))].join("\r\n");
+ const blob=new Blob(["\ufeff"+content],{type:"text/csv;charset=utf-8;"});
+ const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="house-construction-expenses.csv";a.click();URL.revokeObjectURL(url);
+});
+$("importBtn").addEventListener("click",()=>$("importFile").click());
+$("importFile").addEventListener("change",async e=>{
+ const file=e.target.files[0];if(!file)return;
+ try{
+  const text=await file.text();const lines=text.split(/\r?\n/).filter(Boolean);
+  if(lines.length<2)throw Error("No expense rows found.");
+  function parseLine(line){let out=[],v="",q=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'&&q&&line[i+1]==='"'){v+='"';i++}else if(c==='"')q=!q;else if(c===","&&!q){out.push(v);v=""}else v+=c}out.push(v);return out}
+  const heads=parseLine(lines[0]).map(x=>x.replace(/^\ufeff/,"").trim());
+  const imported=lines.slice(1).map(line=>{const vals=parseLine(line),o={};heads.forEach((h,i)=>o[h]=vals[i]||"");return o}).filter(o=>o.date&&Number(o.amount)>0).map(o=>({id:Date.now().toString(36)+Math.random().toString(36).slice(2,8),date:o.date,amount:Number(o.amount),category:o.category||"Other",vendor:o.vendor||"",bill:o.bill||"",description:o.description||""}));
+  if(!imported.length)throw Error("No valid expense records found.");
+  if(confirm(`Import ${imported.length} record(s)? Choose OK to add them to current records.`)){expenses.push(...imported);save();alert("Import complete.")}
+ }catch(err){alert("Could not import this CSV: "+err.message)}finally{$("importFile").value=""}
+});
+render();
+</script></body></html>
